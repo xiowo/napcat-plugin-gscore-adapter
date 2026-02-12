@@ -135,6 +135,7 @@ export class GScoreService {
       this.ws = null;
     }
     this.isConnecting = false;
+    this.reconnectAttempts = 0;
   }
 
   private scheduleReconnect() {
