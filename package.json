@@ -1,5 +1,5 @@
 {
-  "name": "napcat-gscore-adapter",
+  "name": "napcat-plugin-gscore-adapter",
   "plugin": "GScore 适配器",
   "version": "1.0.0",
   "type": "module",

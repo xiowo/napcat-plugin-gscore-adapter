@@ -1,4 +1,4 @@
-# napcat-gscore-adapter
+# 🦊 NapCat早柚核心适配器 (napcat-plugin-gscore-adapter)
 
 这是一个适用于 [NapCat](https://github.com/NapNeko/NapCat-QQ) 的 GScore (早柚核心) 适配器插件。它通过 WebSocket 连接 GScore 服务，将 QQ 消息转发给 GScore 处理，并支持丰富的管理功能。
 
