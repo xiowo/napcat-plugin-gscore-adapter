@@ -1,0 +1,43 @@
+{
+  "name": "napcat-gscore-adapter",
+  "plugin": "GScore 适配器",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "index.mjs",
+  "description": "一个适用于NapCat的GScore适配器",
+  "author": "MortalCat",
+  "license": "MIT",
+  "keywords": [
+    "napcat",
+    "plugin",
+    "qq",
+    "gscore"
+  ],
+  "napcat": {
+    "tags": [
+      "工具"
+    ],
+    "minVersion": "4.14.0",
+    "homepage": ""
+  },
+  "dependencies": {
+    "napcat-types": "0.0.16"
+  },
+  "devDependencies": {
+    "@rollup/plugin-node-resolve": "^15.3.1",
+    "@types/node": "^20.19.33",
+    "@types/ws": "^8.18.1",
+    "napcat-plugin-debug-cli": "^1.2.8",
+    "typescript": "^5.9.3",
+    "vite": "^6.4.1",
+    "ws": "^8.19.0"
+  },
+  "scripts": {
+    "build": "vite build",
+    "watch": "vite build --watch",
+    "dev": "vite build --watch",
+    "push": "vite build",
+    "deploy": "vite build",
+    "typecheck": "tsc --noEmit"
+  }
+}
