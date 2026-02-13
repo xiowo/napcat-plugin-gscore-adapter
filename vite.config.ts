@@ -14,7 +14,7 @@ const nodeModules = [
 ].flat();
 
 /** 依赖排除（如有外部依赖需排除，在此添加） */
-const external: string[] = [];
+const external: string[] = ['bufferutil', 'utf-8-validate'];
 
 /**
  * 构建后自动生成精简 package.json 的 Vite 插件
