@@ -1,6 +1,6 @@
 # 🦊 NapCat早柚核心适配器 (napcat-plugin-gscore-adapter)
 
-这是一个适用于 [NapCat](https://github.com/NapNeko/NapCat-QQ) 的 GScore (早柚核心) 适配器插件。它通过 WebSocket 连接 GScore 服务，将 QQ 消息转发给 GScore 处理，并支持丰富的管理功能。
+这是一个适用于 [NapCat](https://github.com/NapNeko/NapCatQQ) 的 GScore (早柚核心) 适配器插件。它通过 WebSocket 连接 GScore 服务，将 QQ 消息转发给 GScore 处理，并支持丰富的管理功能。
 
 ## ✨ 主要功能
 
@@ -30,7 +30,7 @@
 | **重连间隔** | 断线重连的时间间隔 (ms) | `5000` |
 | **最大重连次数** | 最大尝试重连次数，0 为无限重连 | `10` |
 | **命令前缀** | 群内触发指令的前缀 | `#早柚` |
-| **主人QQ** | 留空默认群主/管理员可使用群内命令，设置后仅该 QQ 可执行管理指令（同时忽略群组管理员权限） | `空` |
+| **主人QQ** | 留空默认群主/管理员可使用群内命令，设置后仅填写 QQ 可执行管理指令（同时忽略群主/管理员权限），多个请使用英文逗号分隔 | `空` |
 
 > ⚠️ **注意**: 如果您在 Docker 环境下运行 NapCat，请勿将连接地址设置为 `localhost` 或 `127.0.0.1`，请使用宿主机 IP (如 `172.17.0.1`) 或 Docker Network 容器名。
 
