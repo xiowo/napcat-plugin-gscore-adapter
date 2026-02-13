@@ -15,6 +15,10 @@
  *   plugin_on_config_change   → 配置变更回调
  */
 
+// 禁用 ws 的 optional dependencies，避免 bundle 后运行时报错
+process.env.WS_NO_BUFFER_UTIL = 'true';
+process.env.WS_NO_UTF_8_VALIDATE = 'true';
+
 import type {
     PluginModule,
     PluginConfigSchema,
