@@ -1,7 +1,7 @@
 {
   "name": "napcat-plugin-gscore-adapter",
   "plugin": "GScore 适配器",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "type": "module",
   "main": "index.mjs",
   "description": "一个适用于NapCat的GScore适配器",
