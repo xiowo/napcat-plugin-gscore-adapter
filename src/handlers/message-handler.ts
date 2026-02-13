@@ -75,7 +75,8 @@ function checkPermission(event: OB11Message): boolean {
     const masterQQ = pluginState.config.masterQQ;
     // 设置了主人QQ
     if (masterQQ && String(masterQQ).trim().length > 0) {
-        return String(event.user_id) === String(masterQQ).trim();
+        const masterQQs = String(masterQQ).split(',').map(qq => qq.trim());
+        return masterQQs.includes(String(event.user_id));
     }
 
     // 私聊直接通过
