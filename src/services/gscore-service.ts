@@ -165,7 +165,7 @@ export class GScoreService {
    * 将 OB11 消息转发到 GsCore
    * 按照早柚协议文档，将 OB11 消息转换为 MessageReceive 格式
    */
-  public forwardMessage(event: OB11Message) {
+  public async forwardMessage(event: OB11Message) {
     if (this.getStatus() !== 'connected') return;
 
     // 仅转发群消息和私聊消息
@@ -174,6 +174,42 @@ export class GScoreService {
     try {
       // 将 OB11 message 段转换为 GsCore 的 Message[] (content)
       const content = this.convertOB11ToGsCoreContent(event);
+
+      let replySeg;
+      if (Array.isArray(event.message)) {
+        replySeg = event.message.find((seg) => seg.type === 'reply');
+      }
+
+      if (replySeg) {
+        const replyId = (replySeg.data as any)?.id;
+        if (replyId) {
+          try {
+            const ctx = pluginState.ctx;
+            // 调用 get_msg 获取被引用消息详情
+            const replyMsg = await ctx.actions.call('get_msg', { message_id: replyId }, ctx.adapterName, ctx.pluginManager.config) as OB11Message;
+
+            pluginState.logger.debug(`[GScore] 获取到的引用消息: ${JSON.stringify(replyMsg)}`);
+
+            if (replyMsg && Array.isArray(replyMsg.message)) {
+              for (const seg of replyMsg.message) {
+                if (seg.type === 'image') {
+                  const segData = seg.data as any;
+                  let url = segData?.url || segData?.file;
+                  if (typeof url === 'string') {
+                    url = url.trim();
+                    if (url) {
+                      content.push({ type: 'image', data: url });
+                      pluginState.logger.debug(`[GScore] 已提取引用消息中的图片: ${url}`);
+                    }
+                  }
+                }
+              }
+            }
+          } catch (err) {
+            pluginState.logger.warn(`[GScore] 获取引用消息失败: ${err}`);
+          }
+        }
+      }
 
       // 确定 user_type
       const userType = event.message_type === 'group' ? 'group' : 'direct';
@@ -415,10 +451,25 @@ export class GScoreService {
           break;
 
         case 'node': {
-          // 合并转发里的子消息，递归转换后拼接为文本
+          // 合并转发里的子消息
           if (Array.isArray(msg.data)) {
-            const subMessages = this.convertGsCoreToOB11(msg.data as GsCoreMessage[]);
-            result.push(...subMessages);
+            const subMessagesRaw = msg.data as GsCoreMessage[];
+            // 遍历每个子消息，将其分别包装为 node 节点
+            for (const subMsg of subMessagesRaw) {
+              const ob11Segments = this.convertGsCoreToOB11([subMsg]);
+
+              if (ob11Segments.length > 0) {
+                // 构造 node 节点
+                result.push({
+                  type: 'node',
+                  data: {
+                    user_id: `3889929917`,
+                    nickname: `🦊小助手`,
+                    content: ob11Segments
+                  }
+                });
+              }
+            }
           }
           break;
         }
