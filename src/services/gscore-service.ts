@@ -235,7 +235,12 @@ export class GScoreService {
           ...sender,
           user_id: sender.user_id ? String(sender.user_id) : String(event.user_id),
           nickname: sender.nickname || sender.card || '',
-        } : {},
+          avatar: `https://q1.qlogo.cn/g?b=qq&nk=${sender.user_id || event.user_id}&s=640`
+        } : {
+          user_id: String(event.user_id),
+          nickname: '',
+          avatar: `https://q1.qlogo.cn/g?b=qq&nk=${event.user_id}&s=640`
+        },
         user_pm: userPm,
         content: content,
       };
