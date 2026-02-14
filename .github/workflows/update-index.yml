@@ -248,6 +248,6 @@ jobs:
             ---
 
             > 此 PR 由 CI 自动创建，来源: [${{ github.repository }}](${{ steps.meta.outputs.homepage }}) Release ${{ steps.meta.outputs.tag_name }}
-          labels: |
-            自动更新
-            插件更新
+          # labels: |
+          #   自动更新
+          #   插件更新
