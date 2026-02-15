@@ -33,6 +33,8 @@ export interface PluginConfig {
     groupConfigs: Record<string, GroupConfig>;
     /** 用户黑名单（QQ号列表），拉黑后不转发该用户消息到 GScore */
     blacklist: string[];
+    /** 自定义图片外显 */
+    customImageSummary?: string;
 }
 
 /**
