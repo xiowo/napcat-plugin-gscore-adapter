@@ -39,6 +39,7 @@ function sanitizeConfig(raw: unknown): PluginConfig {
     if (typeof raw.gscoreEnable === 'boolean') out.gscoreEnable = raw.gscoreEnable;
     if (typeof raw.reconnectInterval === 'number') out.reconnectInterval = raw.reconnectInterval;
     if (typeof raw.maxReconnectAttempts === 'number') out.maxReconnectAttempts = raw.maxReconnectAttempts;
+    if (typeof raw.customImageSummary === 'string') out.customImageSummary = raw.customImageSummary;
 
     // 黑名单清洗
     if (Array.isArray(raw.blacklist)) {

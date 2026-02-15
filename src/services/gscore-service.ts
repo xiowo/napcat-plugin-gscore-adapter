@@ -403,19 +403,32 @@ export class GScoreService {
 
         case 'image': {
           const imgData = String(msg.data);
-          if (imgData.startsWith('base64://')) {
-            // base64 图片
-            result.push({ type: 'image', data: { file: imgData } });
-          } else if (imgData.startsWith('link://')) {
-            // URL 图片（GsCore 可能用 link:// 前缀）
-            result.push({ type: 'image', data: { file: imgData.replace('link://', '') } });
-          } else if (imgData.startsWith('http')) {
-            // 直接 URL
-            result.push({ type: 'image', data: { file: imgData } });
-          } else {
-            // 其他格式，直接传递
-            result.push({ type: 'image', data: { file: imgData } });
+          const customSummary = pluginState.config.customImageSummary;
+          let summary = '[图片]'; // 默认值
+
+          if (customSummary && customSummary.trim().length > 0) {
+            const summaries = customSummary.split(',').map(s => s.trim()).filter(s => s.length > 0);
+            if (summaries.length > 0) {
+              summary = summaries[Math.floor(Math.random() * summaries.length)];
+            }
           }
+
+          const imageData: { file: string; summary?: string } = { file: '' };
+
+          if (imgData.startsWith('base64://')) {
+            imageData.file = imgData;
+          } else if (imgData.startsWith('link://')) {
+            imageData.file = imgData.replace('link://', '');
+          } else {
+            imageData.file = imgData;
+          }
+
+          // 仅在 imageData.file 有效时才添加 summary
+          if (imageData.file) {
+            imageData.summary = summary;
+          }
+
+          result.push({ type: 'image', data: imageData });
           break;
         }
 
