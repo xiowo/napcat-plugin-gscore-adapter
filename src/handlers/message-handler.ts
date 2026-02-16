@@ -70,8 +70,16 @@ export async function sendGroupMessage(
  * 规则：
  * 1. 如果配置了 masterQQ，仅 masterQQ 有权限
  * 2. 如果未配置 masterQQ，仅群主和管理员有权限
+ * 3. 被拉黑的用户无任何权限
  */
 function checkPermission(event: OB11Message): boolean {
+    const userId = String(event.user_id);
+
+    // 检查黑名单
+    if (pluginState.isBlacklisted(userId)) {
+        return false;
+    }
+
     const masterQQ = pluginState.config.masterQQ;
     // 设置了主人QQ
     if (masterQQ && String(masterQQ).trim().length > 0) {
@@ -96,6 +104,12 @@ export async function handleMessage(ctx: NapCatPluginContext, event: OB11Message
         const messageType = event.message_type;
         const groupId = event.group_id;
         const userId = event.user_id;
+
+        // ==================== 黑名单检查 ====================
+        if (pluginState.isBlacklisted(String(userId))) {
+            pluginState.ctx.logger.debug(`用户 ${userId} 在黑名单中，已忽略其消息`);
+            return;
+        }
 
         pluginState.ctx.logger.debug(`收到消息: ${rawMessage} | 类型: ${messageType}`);
 
@@ -133,7 +147,15 @@ export async function handleMessage(ctx: NapCatPluginContext, event: OB11Message
             }
 
             const results: string[] = [];
+            const operatorId = String(event.user_id);
+
             for (const targetId of atTargets) {
+                // 阻止拉黑自己
+                if (targetId === operatorId) {
+                    results.push('❌ 你不能拉黑你自己！');
+                    continue;
+                }
+
                 if (pluginState.isBlacklisted(targetId)) {
                     results.push(`⚠️ 用户 ${targetId} 已在黑名单中`);
                 } else {
@@ -165,12 +187,6 @@ export async function handleMessage(ctx: NapCatPluginContext, event: OB11Message
                 }
             }
             await sendReply(ctx, event, results.join('\n'));
-            return;
-        }
-
-        // ==================== 黑名单检查 ====================
-        if (pluginState.isBlacklisted(String(userId))) {
-            pluginState.ctx.logger.debug(`用户 ${userId} 在黑名单中，跳过转发`);
             return;
         }
 
