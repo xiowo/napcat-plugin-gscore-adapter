@@ -131,8 +131,9 @@ export class GScoreService {
       url = url.slice(0, -1);
     }
 
-    // 使用 napcat-qq号 作为 bot_id 以兼容多bot
-    const botId = `napcat-${pluginState.selfId || 'unknown'}`;
+    // 默认使用 napcat-qq号 作为 bot_id 以兼容多 bot；
+    // 开启“禁用多 bot 功能”后，固定使用 napcat 作为 bot_id。
+    const botId = pluginState.config.disableMultiBot ? 'napcat' : `napcat-${pluginState.selfId || 'unknown'}`;
     // 如果 url 不包含 /ws/，则拼接 /ws/{botId}
     if (!url.includes('/ws/')) {
       url = `${url}/ws/${botId}`;

@@ -24,6 +24,7 @@ export const DEFAULT_CONFIG: PluginConfig = {
     customForwardInfo: false,
     customForwardQQ: '',
     customForwardName: '',
+    disableMultiBot: false,
     privateFileForwardEnabled: false,
     privateJsonBase64MaxKb: 1024,
 };
@@ -72,6 +73,7 @@ export function buildConfigSchema(ctx: NapCatPluginContext): PluginConfigSchema 
 
         // 扩展兼容项
         ctx.NapCatConfig.html('<div style="margin: 20px 0 10px 0; font-weight: bold; border-bottom: 1px solid #ddd; padding-bottom: 5px;">扩展兼容项</div>'),
+        ctx.NapCatConfig.boolean('disableMultiBot', '禁用多 bot 功能', false, '开启后固定使用 napcat 作为 bot_id，不再使用 napcat-QQ号；开启后nc切换账号不影响推送配置'),
         ctx.NapCatConfig.boolean('privateFileForwardEnabled', '私聊转发文件', false, '开启后私聊收到 file 消息会自动获取链接并转发；关闭则不转发私聊文件消息'
         ),
         ctx.NapCatConfig.number('privateJsonBase64MaxKb', '私聊JSON转base64大小限制(KB)', 1024, '私聊收到 json 文件时，下载后若超出此大小则不转发并提示；未超出则转base64发送'),

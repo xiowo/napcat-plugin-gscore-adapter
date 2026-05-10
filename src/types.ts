@@ -45,6 +45,8 @@ export interface PluginConfig {
     customForwardQQ?: string;
     /** 彩蛋配置：自定义合并转发昵称（不填则使用机器人自身） */
     customForwardName?: string;
+    /** 扩展兼容：禁用多 bot 功能，开启后固定使用 napcat 作为 bot_id */
+    disableMultiBot?: boolean;
     /** 扩展兼容：是否开启私聊 file 消息转发（通过 get_private_file_url 获取链接） */
     privateFileForwardEnabled?: boolean;
     /** 扩展兼容：私聊 JSON 文件转 base64 的大小限制（KB） */

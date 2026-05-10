@@ -315,7 +315,7 @@ export const plugin_set_config: PluginModule['plugin_set_config'] = async (ctx, 
 
     // 检查 GScore 相关配置是否变更，若变更则重连
     const newConfig = pluginState.config;
-    const gscoreKeys: (keyof PluginConfig)[] = ['gscoreUrl', 'gscoreToken', 'gscoreEnable', 'reconnectInterval', 'maxReconnectAttempts'];
+    const gscoreKeys: (keyof PluginConfig)[] = ['gscoreUrl', 'gscoreToken', 'gscoreEnable', 'reconnectInterval', 'maxReconnectAttempts', 'disableMultiBot'];
 
     const needsReconnect = gscoreKeys.some(k => oldConfig[k] !== newConfig[k]);
 
@@ -347,7 +347,7 @@ export const plugin_on_config_change: PluginModule['plugin_on_config_change'] = 
         ctx.logger.debug(`配置项 ${key} 已更新`);
 
         // GScore 相关配置变更处理
-        const gscoreKeys = ['gscoreUrl', 'gscoreToken', 'gscoreEnable', 'reconnectInterval', 'maxReconnectAttempts'];
+        const gscoreKeys = ['gscoreUrl', 'gscoreToken', 'gscoreEnable', 'reconnectInterval', 'maxReconnectAttempts', 'disableMultiBot'];
         if (gscoreKeys.includes(key)) {
             const { GScoreService } = await import('./services/gscore-service');
 

@@ -45,6 +45,7 @@ function sanitizeConfig(raw: unknown): PluginConfig {
     if (typeof raw.customForwardInfo === 'boolean') out.customForwardInfo = raw.customForwardInfo;
     if (typeof raw.customForwardQQ === 'string') out.customForwardQQ = raw.customForwardQQ;
     if (typeof raw.customForwardName === 'string') out.customForwardName = raw.customForwardName;
+    if (typeof raw.disableMultiBot === 'boolean') out.disableMultiBot = raw.disableMultiBot;
     if (typeof raw.privateFileForwardEnabled === 'boolean') out.privateFileForwardEnabled = raw.privateFileForwardEnabled;
     if (typeof raw.privateJsonBase64MaxKb === 'number') out.privateJsonBase64MaxKb = raw.privateJsonBase64MaxKb;
 
