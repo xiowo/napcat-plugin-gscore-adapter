@@ -73,6 +73,7 @@ function copyAssetsPlugin() {
                         version: pkg.version,
                         type: pkg.type,
                         main: pkg.main,
+                        icon: pkg.icon,
                         description: pkg.description,
                         author: pkg.author,
                         dependencies: pkg.dependencies,
@@ -121,3 +122,4 @@ export default defineConfig({
     },
     plugins: [nodeResolve(), copyAssetsPlugin(), napcatHmrPlugin({})],
 });
+  
