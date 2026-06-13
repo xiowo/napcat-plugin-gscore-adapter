@@ -264,14 +264,21 @@ function registerWebUIRoutes(ctx: NapCatPluginContext) {
     });
 }
 
-/**
- * 消息处理
- * 收到事件时调用，仅处理消息事件
- */
-export const plugin_onmessage: PluginModule['plugin_onmessage'] = async (ctx, event) => {
-    const postType = (event as any).post_type;
-    const isMessage = postType === EventType.MESSAGE;
+async function handleIncomingEvent(ctx: NapCatPluginContext, event: any): Promise<void> {
+    const postType = event?.post_type;
+    const isMessage = postType === EventType.MESSAGE || postType === 'message';
     const isMessageSent = postType === 'message_sent' || postType === (EventType as any).MESSAGE_SENT;
+    const isNotice = postType === 'notice' || postType === (EventType as any).NOTICE;
+
+    if (isNotice) {
+        try {
+            const { GScoreService } = await import('./services/gscore-service');
+            await GScoreService.getInstance().forwardMetaEvent(event);
+        } catch (err) {
+            ctx.logger.error('转发 meta 事件到 GScore 失败:', err);
+        }
+        return;
+    }
 
     if (!isMessage && !isMessageSent) return;
 
@@ -280,7 +287,23 @@ export const plugin_onmessage: PluginModule['plugin_onmessage'] = async (ctx, ev
         return;
     }
 
-    await handleMessage(ctx, event as any);
+    await handleMessage(ctx, event);
+}
+
+/**
+ * 消息处理
+ * NapCat 的 plugin_onmessage 只接收消息事件。
+ */
+export const plugin_onmessage: PluginModule['plugin_onmessage'] = async (ctx, event) => {
+    await handleIncomingEvent(ctx, event as any);
+};
+
+/**
+ * 通用事件处理
+ * notice/request/meta 等非消息事件需要通过 plugin_onevent 接收。
+ */
+export const plugin_onevent: PluginModule['plugin_onevent'] = async (ctx, event) => {
+    await handleIncomingEvent(ctx, event as any);
 };
 
 /**

@@ -21,7 +21,10 @@ interface GsCoreMessageSend {
   target_type: string | null;
   target_id: string | null;
   content: GsCoreMessage[] | null;
+  echo?: string | null;
 }
+
+type RecallMessageId = string | string[] | number | number[] | null;
 
 export class GScoreService {
   private static instance: GScoreService;
@@ -289,6 +292,22 @@ export class GScoreService {
     }, interval);
   }
 
+  private getBotId(): string {
+    return 'onebot';
+  }
+
+  private getBotSelfId(fallback?: unknown): string {
+    return String(pluginState.selfId || fallback || '');
+  }
+
+  private sendMessageReceive(messageReceive: Record<string, unknown>) {
+    if (this.getStatus() !== 'connected') return;
+
+    const payload = JSON.stringify(messageReceive);
+    // GsCore 使用 receive_bytes()，需要发送二进制帧
+    this.ws?.send(Buffer.from(payload));
+  }
+
   /**
    * 将 OB11 消息转发到 GsCore
    * 按照早柚协议文档，将 OB11 消息转换为 MessageReceive 格式
@@ -353,8 +372,8 @@ export class GScoreService {
       // 构造 GsCore MessageReceive 结构
       // 所有 ID 字段必须为 string 类型
       const messageReceive = {
-        bot_id: 'onebot',
-        bot_self_id: String(pluginState.selfId || event.self_id || ''),
+        bot_id: this.getBotId(),
+        bot_self_id: this.getBotSelfId(event.self_id),
         msg_id: String(event.message_id || ''),
         user_type: userType,
         group_id: event.group_id ? String(event.group_id) : null,
@@ -373,13 +392,111 @@ export class GScoreService {
         content: content,
       };
 
-      const payload = JSON.stringify(messageReceive);
-      // GsCore 使用 receive_bytes()，需要发送二进制帧
-      this.ws?.send(Buffer.from(payload));
+      this.sendMessageReceive(messageReceive);
       pluginState.logger.debug(`[GScore] 已转发${userType === 'group' ? '群' : '私聊'} ${event.group_id || event.user_id} 消息`);
     } catch (error) {
       pluginState.logger.error('[GScore] 发送消息失败:', error);
     }
+  }
+
+  /**
+   * 将 NapCat/OneBot notice 事件转为 GScore meta 事件。
+   * 标准事件仅上报 user_join_group / user_exit_group / poke。
+   */
+  public async forwardMetaEvent(event: Record<string, any>) {
+    if (this.getStatus() !== 'connected') return;
+
+    const meta = this.buildMetaEvent(event);
+    if (!meta) {
+      pluginState.logger.debug(`[GScore] 已忽略非标准 notice 事件: notice_type=${event.notice_type || ''}, sub_type=${event.sub_type || ''}`);
+      return;
+    }
+
+    const groupId = meta.data.group_id ? String(meta.data.group_id) : null;
+    const userId = meta.data.user_id ? String(meta.data.user_id) : '';
+    const userType = groupId ? 'group' : 'direct';
+    const userPm = this.getUserPermission(userId);
+
+    const messageReceive = {
+      bot_id: this.getBotId(),
+      bot_self_id: this.getBotSelfId(event.self_id),
+      msg_id: '',
+      user_type: userType,
+      group_id: groupId,
+      user_id: userId,
+      sender: {},
+      user_pm: userPm,
+      content: [{ type: `meta-${meta.eventName}`, data: meta.data }],
+    };
+
+    this.sendMessageReceive(messageReceive);
+    pluginState.logger.info(`[GScore] 已上报 meta 事件: ${meta.eventName} ${JSON.stringify(meta.data)}`);
+  }
+
+  private buildMetaEvent(event: Record<string, any>): { eventName: string; data: Record<string, string> } | null {
+    if (event.post_type !== 'notice') return null;
+
+    const noticeType = String(event.notice_type || '');
+    const subType = event.sub_type !== undefined ? String(event.sub_type) : undefined;
+
+    if (noticeType === 'group_increase') {
+      const userId = this.stringifyId(event.user_id);
+      const groupId = this.stringifyId(event.group_id);
+      if (!userId || !groupId) return null;
+
+      const data: Record<string, string> = {
+        user_id: userId,
+        group_id: groupId,
+      };
+      const operatorId = this.stringifyId(event.operator_id);
+      if (operatorId) data.operator_id = operatorId;
+      if (subType) data.sub_type = subType;
+
+      return { eventName: 'user_join_group', data };
+    }
+
+    if (noticeType === 'group_decrease') {
+      const userId = this.stringifyId(event.user_id);
+      const groupId = this.stringifyId(event.group_id);
+      if (!userId || !groupId) return null;
+
+      const data: Record<string, string> = {
+        user_id: userId,
+        group_id: groupId,
+      };
+      const operatorId = this.stringifyId(event.operator_id);
+      if (operatorId) data.operator_id = operatorId;
+      if (subType) data.sub_type = subType;
+
+      return { eventName: 'user_exit_group', data };
+    }
+
+    if (noticeType === 'notify' && subType === 'poke') {
+      const userId = this.stringifyId(event.user_id);
+      if (!userId) return null;
+
+      const data: Record<string, string> = {
+        user_id: userId,
+        target_id: this.stringifyId(event.target_id) || this.getBotSelfId(event.self_id),
+      };
+      const groupId = this.stringifyId(event.group_id);
+      if (groupId) data.group_id = groupId;
+
+      return { eventName: 'poke', data };
+    }
+
+    return null;
+  }
+
+  private stringifyId(value: unknown): string {
+    if (value === null || value === undefined || value === '') return '';
+    return String(value);
+  }
+
+  private getUserPermission(userId: string): number {
+    const masterQQ = pluginState.config.masterQQ;
+    const masters = masterQQ ? String(masterQQ).split(',').map(qq => qq.trim()).filter(Boolean) : [];
+    return userId && masters.includes(userId) ? 1 : 6;
   }
 
   /**
@@ -529,8 +646,20 @@ export class GScoreService {
       return;
     }
 
-    // 检查是否为 log 类型消息（仅输出日志不发送）
     const firstMsg = content[0];
+
+    // 控制消息必须在普通发送分发前短路，避免误发为空消息/文本消息。
+    if (content.length === 1 && firstMsg.type === 'excute_delete_message') {
+      await this.handleDeleteMessageControl(msgSend, firstMsg);
+      return;
+    }
+
+    if (content.length === 1 && firstMsg.type === 'excute_ban_user') {
+      await this.handleBanUserControl(firstMsg);
+      return;
+    }
+
+    // 检查是否为 log 类型消息（仅输出日志不发送）
     if (firstMsg.type && firstMsg.type.startsWith('log_')) {
       const level = firstMsg.type.replace('log_', '').toLowerCase();
       const logData = String(firstMsg.data || '');
@@ -555,6 +684,9 @@ export class GScoreService {
 
     if (!target_id) {
       pluginState.logger.warn('[GScore] 收到消息但没有 target_id，无法发送');
+      if (msgSend.echo) {
+        await this.sendRecallReceipt(msgSend, null);
+      }
       return;
     }
 
@@ -564,10 +696,15 @@ export class GScoreService {
 
       if (ob11Message.length === 0) {
         pluginState.logger.debug('[GScore] 转换后消息为空，忽略');
+        if (msgSend.echo) {
+          await this.sendRecallReceipt(msgSend, null);
+        }
         return;
       }
 
       const ctx = pluginState.ctx;
+
+      let recallId: RecallMessageId = null;
 
       // 根据 target_type 决定发送目标
       if (target_type === 'direct') {
@@ -577,7 +714,8 @@ export class GScoreService {
           message_type: 'private',
           user_id: target_id,
         };
-        await ctx.actions.call('send_msg', params, ctx.adapterName, ctx.pluginManager.config);
+        const ret = await ctx.actions.call('send_msg', params, ctx.adapterName, ctx.pluginManager.config);
+        recallId = this.extractMessageId(ret);
         pluginState.logger.debug(`[GScore] 已发送私聊消息到 ${target_id}`);
       } else {
         // 群消息（group/channel/sub_channel 都走群发送）
@@ -586,11 +724,118 @@ export class GScoreService {
           message_type: 'group',
           group_id: target_id,
         };
-        await ctx.actions.call('send_msg', params, ctx.adapterName, ctx.pluginManager.config);
+        const ret = await ctx.actions.call('send_msg', params, ctx.adapterName, ctx.pluginManager.config);
+        recallId = this.extractMessageId(ret);
         pluginState.logger.debug(`[GScore] 已发送群消息到 ${target_id}`);
+      }
+
+      if (msgSend.echo) {
+        await this.sendRecallReceipt(msgSend, recallId);
       }
     } catch (error) {
       pluginState.logger.error('[GScore] 发送回复消息失败:', error);
+      if (msgSend.echo) {
+        await this.sendRecallReceipt(msgSend, null);
+      }
+    }
+  }
+
+  private extractMessageId(ret: unknown): RecallMessageId {
+    if (!ret || typeof ret !== 'object') return null;
+    const data = ret as Record<string, any>;
+    const messageId = data.message_id ?? data.msg_id ?? data.id;
+    if (Array.isArray(messageId)) {
+      return messageId
+        .filter((id) => id !== null && id !== undefined && id !== '')
+        .map((id) => String(id));
+    }
+    if (messageId === null || messageId === undefined || messageId === '') return null;
+    return String(messageId);
+  }
+
+  private async sendRecallReceipt(msgSend: GsCoreMessageSend, recallId: RecallMessageId) {
+    try {
+      this.sendMessageReceive({
+        bot_id: msgSend.bot_id,
+        bot_self_id: msgSend.bot_self_id,
+        msg_id: '',
+        user_type: msgSend.target_type || null,
+        group_id: msgSend.target_type === 'group' ? msgSend.target_id : null,
+        user_id: msgSend.target_type === 'direct' ? msgSend.target_id : '',
+        sender: {},
+        user_pm: 6,
+        content: [{
+          type: 'recall_message_id',
+          data: {
+            echo: msgSend.echo,
+            id: recallId,
+          },
+        }],
+      });
+      pluginState.logger.debug(`[GScore] 已回传撤回回执: echo=${msgSend.echo}, id=${JSON.stringify(recallId)}`);
+    } catch (error) {
+      pluginState.logger.warn('[GScore] 回传撤回回执失败:', error);
+    }
+  }
+
+  private async handleDeleteMessageControl(msgSend: GsCoreMessageSend, control: GsCoreMessage) {
+    const data = control.data;
+    const messageId = data && typeof data === 'object' ? (data as Record<string, unknown>).message_id : null;
+    if (messageId === null || messageId === undefined || messageId === '') {
+      pluginState.logger.warn('[GScore] 撤回控制包缺少 message_id，已忽略');
+      return;
+    }
+
+    try {
+      const ctx = pluginState.ctx;
+      await ctx.actions.call(
+        'delete_msg',
+        { message_id: Number.isNaN(Number(messageId)) ? String(messageId) : Number(messageId) },
+        ctx.adapterName,
+        ctx.pluginManager.config
+      );
+      pluginState.logger.debug(`[GScore] 已撤回消息: ${messageId} target=${msgSend.target_type}:${msgSend.target_id}`);
+    } catch (error) {
+      pluginState.logger.warn(`[GScore] 撤回消息失败 message_id=${messageId}:`, error);
+    }
+  }
+
+  private async handleBanUserControl(control: GsCoreMessage) {
+    const data = control.data;
+    if (!data || typeof data !== 'object') {
+      pluginState.logger.warn('[GScore] 禁言控制包 data 非对象，已忽略');
+      return;
+    }
+
+    const payload = data as Record<string, unknown>;
+    const userId = payload.user_id;
+    const groupId = payload.group_id;
+    const duration = payload.duration;
+
+    const durationValid = typeof duration === 'number'
+      || (typeof duration === 'string' && /^\d+$/.test(duration));
+    if (userId === null || userId === undefined || userId === ''
+      || groupId === null || groupId === undefined || groupId === ''
+      || !durationValid) {
+      pluginState.logger.warn('[GScore] 禁言控制包字段不完整或 duration 非法，已忽略');
+      return;
+    }
+
+    try {
+      const ctx = pluginState.ctx;
+      await ctx.actions.call(
+        'set_group_ban',
+        {
+          group_id: Number(groupId),
+          user_id: Number(userId),
+          duration: Number(duration),
+        },
+        ctx.adapterName,
+        ctx.pluginManager.config
+      );
+      pluginState.logger.debug(`[GScore] 已执行禁言: group=${groupId}, user=${userId}, duration=${duration}`);
+    } catch (error) {
+      pluginState.logger.warn(`[GScore] 禁言失败 group=${groupId}, user=${userId}:`, error);
     }
   }
 
@@ -663,6 +908,10 @@ export class GScoreService {
             let fileData = '';
             if (fileContentRaw.startsWith('base64://')) {
               fileData = fileContentRaw;
+            } else if (fileContentRaw.startsWith('link://')) {
+              fileData = fileContentRaw.replace('link://', '');
+            } else if (/^https?:\/\//i.test(fileContentRaw)) {
+              fileData = fileContentRaw;
             } else if (fileContentRaw.length > 0) {
               fileData = `base64://${fileContentRaw}`;
             }
@@ -690,7 +939,7 @@ export class GScoreService {
               if (ob11Segments.length > 0) {
                 // 构造 node 节点
                 let userId = `3889929917`;
-                let nickname = `🦊小助手`;
+                let nickname = `小助手`;
                 
                 // 使用自定义配置
                 if (pluginState.config.customForwardInfo) {
@@ -706,7 +955,7 @@ export class GScoreService {
                   if (customName && customName.trim()) {
                     nickname = customName.trim();
                   } else {
-                    nickname = String(pluginState.selfNickname || '🦊小助手');
+                    nickname = String(pluginState.selfNickname || '小助手');
                   }
                 }
 
