@@ -538,6 +538,9 @@ export class GScoreService {
         case 'record':
           content.push({ type: 'record', data: segData?.url || segData?.file || '' });
           break;
+        case 'video':
+          content.push({ type: 'video', data: segData?.url || segData?.file || '' });
+          break;
         case 'file':
           if (event.message_type === 'private') {
             if (!pluginState.config.privateFileForwardEnabled) {
@@ -898,6 +901,10 @@ export class GScoreService {
           break;
         }
 
+        case 'video':
+          result.push({ type: 'video', data: { file: String(msg.data) } });
+          break;
+
         case 'file': {
           const fileStr = String(msg.data);
           const sepIdx = fileStr.indexOf('|');
@@ -940,18 +947,18 @@ export class GScoreService {
                 // 构造 node 节点
                 let userId = `3889929917`;
                 let nickname = `小助手`;
-                
+
                 // 使用自定义配置
                 if (pluginState.config.customForwardInfo) {
                   const customQQ = pluginState.config.customForwardQQ;
                   const customName = pluginState.config.customForwardName;
-                  
+
                   if (customQQ && customQQ.trim()) {
                     userId = customQQ.trim();
                   } else {
                     userId = String(pluginState.selfId || '3889929917');
                   }
-                  
+
                   if (customName && customName.trim()) {
                     nickname = customName.trim();
                   } else {
