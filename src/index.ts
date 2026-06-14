@@ -303,6 +303,12 @@ export const plugin_onmessage: PluginModule['plugin_onmessage'] = async (ctx, ev
  * notice/request/meta 等非消息事件需要通过 plugin_onevent 接收。
  */
 export const plugin_onevent: PluginModule['plugin_onevent'] = async (ctx, event) => {
+    const postType = (event as any)?.post_type;
+    const isMessage = postType === EventType.MESSAGE || postType === 'message';
+    const isMessageSent = postType === 'message_sent' || postType === (EventType as any).MESSAGE_SENT;
+
+    if (isMessage || isMessageSent) return;
+
     await handleIncomingEvent(ctx, event as any);
 };
 
