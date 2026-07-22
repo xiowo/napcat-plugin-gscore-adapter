@@ -24,6 +24,9 @@
 > 容器建议映射 `/app/napcat/plugins` 和 `/app/napcat/config` 避免更新容器导致插件以及其配置丢失
 
 > 💡 你也可以在 **[napcat-plugin-update-checker](https://github.com/xiowo/napcat-plugin-update-checker) 中直接安装插件**。
+
+> ⚠注意：高版本nc在插件加载器写死了白名单，如果你需要在高版本nc安装插件，请自行将 `package.json` 中的 `name` 改为nc商店白名单插件的插件id
+
 ## 📝 配置指南
 
 在 NapCat WebUI 的插件配置页面中，您可以自定义以下选项：
