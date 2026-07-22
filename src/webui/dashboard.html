@@ -133,6 +133,11 @@
             transition: all 0.3s var(--ease-smooth);
         }
 
+        .filter-card {
+            position: relative;
+            z-index: 20;
+        }
+
         .card:hover {
             box-shadow: var(--shadow-hover);
             transform: translateY(-2px);
@@ -179,6 +184,66 @@
             outline: none;
             border-color: var(--primary);
             box-shadow: 0 0 0 3px var(--primary-light);
+        }
+
+        .dropdown-button {
+            min-width: 112px;
+            height: 44px;
+            padding: 0 14px 0 18px;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            background: #fff;
+            color: var(--text);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            transition: all 0.2s ease;
+        }
+
+        .dropdown-button:hover,
+        .dropdown-button.open {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px var(--primary-light);
+        }
+
+        .dropdown-menu {
+            position: absolute;
+            top: calc(100% + 8px);
+            right: 0;
+            z-index: 80;
+            min-width: 136px;
+            padding: 8px;
+            border: 1px solid var(--border-light);
+            border-radius: 14px;
+            background: #fff;
+            box-shadow: 0 14px 32px rgba(90, 74, 58, 0.12);
+            transform-origin: top center;
+        }
+
+        .dropdown-item {
+            width: 100%;
+            padding: 10px 18px;
+            border-radius: 9px;
+            color: var(--text);
+            text-align: left;
+            transition: all 0.2s ease;
+        }
+
+        .dropdown-item:hover,
+        .dropdown-item.active {
+            background: var(--primary-light);
+            color: var(--primary);
+        }
+
+        .dropdown-arrow {
+            width: 16px;
+            height: 16px;
+            transition: transform 0.25s var(--ease-smooth);
+        }
+
+        .dropdown-arrow.open {
+            transform: rotate(180deg);
         }
 
         /* 侧边栏 */
@@ -724,16 +789,32 @@
                 </div>
 
                 <!-- 搜索栏 -->
-                <div class="card p-4 flex items-center gap-3">
+                <div class="card filter-card p-4 flex items-center gap-3">
                     <div class="flex-1 relative">
                         <input type="text" x-model="groupSearch" placeholder="搜索群组..." class="input w-full pl-9">
                         <span class="absolute left-3 top-1/2 -translate-y-1/2">🔍</span>
                     </div>
-                    <select x-model="groupFilter" class="input">
-                        <option value="all">全部</option>
-                        <option value="enabled">已启用</option>
-                        <option value="disabled">已禁用</option>
-                    </select>
+                    <div class="relative" @click.outside="groupFilterOpen = false">
+                        <button type="button" @click="groupFilterOpen = !groupFilterOpen" class="dropdown-button"
+                            :class="groupFilterOpen ? 'open' : ''">
+                            <span x-text="groupFilterLabel"></span>
+                            <svg class="dropdown-arrow" :class="groupFilterOpen ? 'open' : ''" fill="none"
+                                viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+                            </svg>
+                        </button>
+                        <div x-show="groupFilterOpen" x-cloak x-transition:enter="secret-panel-enter"
+                            x-transition:enter-start="secret-panel-enter"
+                            x-transition:enter-end="secret-panel-enter-active" x-transition:leave="secret-panel-leave"
+                            x-transition:leave-start="secret-panel-leave"
+                            x-transition:leave-end="secret-panel-leave-active" class="dropdown-menu">
+                            <template x-for="option in groupFilterOptions" :key="option.value">
+                                <button type="button" @click="selectGroupFilter(option.value)" class="dropdown-item"
+                                    :class="groupFilter === option.value ? 'active' : ''"
+                                    x-text="option.label"></button>
+                            </template>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- 群组列表 -->
@@ -823,6 +904,12 @@
                 groups: [],
                 groupSearch: '',
                 groupFilter: 'all',
+                groupFilterOpen: false,
+                groupFilterOptions: [
+                    { value: 'all', label: '全部' },
+                    { value: 'enabled', label: '已启用' },
+                    { value: 'disabled', label: '已禁用' },
+                ],
                 uptimeTimer: null,
                 showSecretPanel: false,
                 clickCount: 0,
@@ -838,6 +925,10 @@
 
                 get hasPendingGroupPrefixChanges() {
                     return this.groups.some(g => g.forwardPrefixDirty);
+                },
+
+                get groupFilterLabel() {
+                    return this.groupFilterOptions.find(option => option.value === this.groupFilter)?.label || '全部';
                 },
 
                 get filteredGroups() {
@@ -1012,6 +1103,11 @@
                 markGroupForwardPrefixDirty(group) {
                     group.forwardPrefix = group.forwardPrefix || '';
                     group.forwardPrefixDirty = group.forwardPrefix !== (group.savedForwardPrefix || '');
+                },
+
+                selectGroupFilter(value) {
+                    this.groupFilter = value;
+                    this.groupFilterOpen = false;
                 },
 
                 async toggleGroup(group) {
