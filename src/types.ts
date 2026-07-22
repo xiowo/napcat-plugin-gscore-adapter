@@ -59,4 +59,6 @@ export interface PluginConfig {
 export interface GroupConfig {
     /** 是否启用此群的功能 */
     enabled?: boolean;
+    /** 群消息转发前缀，留空则转发全部消息 */
+    forwardPrefix?: string;
 }

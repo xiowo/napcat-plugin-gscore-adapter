@@ -30,7 +30,7 @@ function sanitizeConfig(raw: unknown): PluginConfig {
     if (!isObject(raw)) return { ...DEFAULT_CONFIG, groupConfigs: {} };
 
     const out: PluginConfig = { ...DEFAULT_CONFIG, groupConfigs: {} };
-  
+
     if (typeof raw.gscoreEnable === 'boolean') out.gscoreEnable = raw.gscoreEnable;
     if (typeof raw.forwardSelfMessage === 'boolean') out.forwardSelfMessage = raw.forwardSelfMessage;
     if (typeof raw.commandPrefix === 'string') out.commandPrefix = raw.commandPrefix;
@@ -60,6 +60,7 @@ function sanitizeConfig(raw: unknown): PluginConfig {
             if (isObject(groupConfig)) {
                 const cfg: GroupConfig = {};
                 if (typeof groupConfig.enabled === 'boolean') cfg.enabled = groupConfig.enabled;
+                if (typeof groupConfig.forwardPrefix === 'string') cfg.forwardPrefix = groupConfig.forwardPrefix;
                 out.groupConfigs[groupId] = cfg;
             }
         }
@@ -209,6 +210,11 @@ class PluginState {
      */
     isGroupEnabled(groupId: string): boolean {
         return this.config.groupConfigs[groupId]?.enabled !== false;
+    }
+
+    /** 获取群消息转发前缀（默认空） */
+    getGroupForwardPrefix(groupId: string): string {
+        return this.config.groupConfigs[groupId]?.forwardPrefix || '';
     }
 
     // ==================== 黑名单管理 ====================

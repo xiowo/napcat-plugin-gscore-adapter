@@ -29,7 +29,7 @@ import { EventType } from 'napcat-types/napcat-onebot/event/index';
 import { buildConfigSchema } from './config';
 import { pluginState } from './core/state';
 import { handleMessage } from './handlers/message-handler';
-import type { PluginConfig } from './types';
+import type { GroupConfig, PluginConfig } from './types';
 
 // ==================== 配置 UI Schema ====================
 
@@ -151,7 +151,8 @@ function registerWebUIRoutes(ctx: NapCatPluginContext) {
                 const groupConfig = config.groupConfigs[groupId] || {};
                 return {
                     ...group,
-                    enabled: groupConfig.enabled !== false
+                    enabled: groupConfig.enabled !== false,
+                    forwardPrefix: groupConfig.forwardPrefix || ''
                 };
             });
 
@@ -222,9 +223,13 @@ function registerWebUIRoutes(ctx: NapCatPluginContext) {
                 }
             }
 
-            const { enabled } = body || {};
-            pluginState.updateGroupConfig(groupId, { enabled: Boolean(enabled) });
-            ctx.logger.info(`群 ${groupId} 配置已更新: enabled=${enabled}`);
+            const { enabled, forwardPrefix } = body || {};
+            const nextConfig: Partial<GroupConfig> = {};
+            if (typeof enabled === 'boolean') nextConfig.enabled = enabled;
+            if (typeof forwardPrefix === 'string') nextConfig.forwardPrefix = forwardPrefix;
+
+            pluginState.updateGroupConfig(groupId, nextConfig);
+            ctx.logger.info(`群 ${groupId} 配置已更新: ${JSON.stringify(nextConfig)}`);
             res.json({ code: 0, message: 'ok' });
         } catch (err) {
             ctx.logger.error('更新群配置失败:', err);

@@ -216,7 +216,8 @@
         /* 群组项 */
         .group-item {
             display: flex;
-            align-items: center;
+            flex-direction: column;
+            gap: 12px;
             padding: 14px;
             border-radius: 10px;
             border: 1px solid var(--border);
@@ -391,6 +392,32 @@
             animation: starPulse 2s ease-in-out infinite;
         }
 
+        .floating-save-button {
+            box-shadow: 0 10px 24px rgba(232, 184, 150, 0.35);
+        }
+
+        .floating-save-enter {
+            opacity: 0;
+            transform: scale(0.9) translateY(12px);
+        }
+
+        .floating-save-enter-active {
+            opacity: 1;
+            transform: scale(1) translateY(0);
+            transition: all 0.35s var(--ease-bounce);
+        }
+
+        .floating-save-leave {
+            opacity: 1;
+            transform: scale(1) translateY(0);
+        }
+
+        .floating-save-leave-active {
+            opacity: 0;
+            transform: scale(0.95) translateY(8px);
+            transition: all 0.22s var(--ease-smooth);
+        }
+
         /* 卡片入场动画 */
         @keyframes slideUpFade {
             from {
@@ -519,6 +546,14 @@
         </header>
 
         <div class="flex-1 overflow-auto p-4 lg:p-8 relative">
+
+            <button x-show="hasPendingGroupPrefixChanges" x-cloak x-transition:enter="floating-save-enter"
+                x-transition:enter-start="floating-save-enter" x-transition:enter-end="floating-save-enter-active"
+                x-transition:leave="floating-save-leave" x-transition:leave-start="floating-save-leave"
+                x-transition:leave-end="floating-save-leave-active" @click="savePendingGroupPrefixes"
+                class="fixed right-5 bottom-5 z-40 btn btn-primary floating-save-button transition-all hover:scale-105">
+                保存配置
+            </button>
 
             <!-- 彩蛋二级隐藏界面 -->
             <div x-show="showSecretPanel" x-cloak x-transition:enter="secret-panel-enter"
@@ -705,19 +740,27 @@
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                     <template x-for="(group, index) in filteredGroups" :key="group.group_id">
                         <div class="group-item animate-fade-in" :style="`animation-delay: ${index * 50}ms`">
-                            <div class="flex items-center space-x-3 overflow-hidden flex-1">
-                                <img :src="`http://p.qlogo.cn/gh/${group.group_id}/${group.group_id}/100/`"
-                                    :alt="group.group_name" class="w-10 h-10 rounded-lg flex-shrink-0 object-cover"
-                                    @error="$el.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 40 40%22><rect fill=%22%236366f1%22 width=%2240%22 height=%2240%22 rx=%228%22/><text x=%2250%%22 y=%2255%%22 dominant-baseline=%22middle%22 text-anchor=%22middle%22 fill=%22white%22 font-size=%2216%22 font-weight=%22bold%22>' + group.group_name.slice(0,1) + '</text></svg>'">
-                                <div class="min-w-0 flex-1">
-                                    <div class="font-bold truncate" x-text="group.group_name"></div>
-                                    <div class="text-xs text-slate-400" x-text="group.group_id"></div>
+                            <div class="flex items-center w-full">
+                                <div class="flex items-center space-x-3 overflow-hidden flex-1">
+                                    <img :src="`http://p.qlogo.cn/gh/${group.group_id}/${group.group_id}/100/`"
+                                        :alt="group.group_name" class="w-10 h-10 rounded-lg flex-shrink-0 object-cover"
+                                        @error="$el.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 40 40%22><rect fill=%22%236366f1%22 width=%2240%22 height=%2240%22 rx=%228%22/><text x=%2250%%22 y=%2255%%22 dominant-baseline=%22middle%22 text-anchor=%22middle%22 fill=%22white%22 font-size=%2216%22 font-weight=%22bold%22>' + group.group_name.slice(0,1) + '</text></svg>'">
+                                    <div class="min-w-0 flex-1">
+                                        <div class="font-bold truncate" x-text="group.group_name"></div>
+                                        <div class="text-xs text-slate-400" x-text="group.group_id"></div>
+                                    </div>
                                 </div>
+                                <label class="toggle-switch ml-3 flex-shrink-0">
+                                    <input type="checkbox" :checked="group.enabled" @change="toggleGroup(group)">
+                                    <span class="toggle-slider"></span>
+                                </label>
                             </div>
-                            <label class="toggle-switch ml-3">
-                                <input type="checkbox" :checked="group.enabled" @change="toggleGroup(group)">
-                                <span class="toggle-slider"></span>
-                            </label>
+                            <div class="w-full">
+                                <label class="block text-xs mb-1" style="color: var(--text-secondary)">转发前缀</label>
+                                <input type="text" x-model="group.forwardPrefix"
+                                    @input="markGroupForwardPrefixDirty(group)" @keydown.enter="$event.target.blur()"
+                                    placeholder="留空则转发全部消息" class="input w-full text-sm">
+                            </div>
                         </div>
                     </template>
                 </div>
@@ -792,6 +835,10 @@
                 showConfirmDialog: false,
                 confirmDialogMessage: '',
                 confirmCallback: null,
+
+                get hasPendingGroupPrefixChanges() {
+                    return this.groups.some(g => g.forwardPrefixDirty);
+                },
 
                 get filteredGroups() {
                     let result = this.groups;
@@ -951,10 +998,20 @@
 
                 async fetchGroups() {
                     try {
-                        this.groups = await this.api('/groups');
+                        this.groups = (await this.api('/groups')).map(group => ({
+                            ...group,
+                            forwardPrefix: group.forwardPrefix || '',
+                            savedForwardPrefix: group.forwardPrefix || '',
+                            forwardPrefixDirty: false,
+                        }));
                     } catch (e) {
                         console.error('Failed to load groups');
                     }
+                },
+
+                markGroupForwardPrefixDirty(group) {
+                    group.forwardPrefix = group.forwardPrefix || '';
+                    group.forwardPrefixDirty = group.forwardPrefix !== (group.savedForwardPrefix || '');
                 },
 
                 async toggleGroup(group) {
@@ -965,6 +1022,24 @@
                     } catch (e) {
                         group.enabled = !group.enabled;
                         showToast('更新群配置失败: ' + e.message, 'error');
+                    }
+                },
+
+                async savePendingGroupPrefixes() {
+                    const pendingGroups = this.groups.filter(g => g.forwardPrefixDirty);
+                    if (pendingGroups.length === 0) return;
+
+                    try {
+                        for (const group of pendingGroups) {
+                            const forwardPrefix = group.forwardPrefix || '';
+                            await this.api(`/groups/${group.group_id}/config`, 'POST', { forwardPrefix });
+                            group.savedForwardPrefix = forwardPrefix;
+                            group.forwardPrefixDirty = false;
+                        }
+                        showToast(`已保存 ${pendingGroups.length} 个群组的转发前缀`, 'success');
+                    } catch (e) {
+                        showToast('保存转发前缀失败: ' + e.message, 'error');
+                        await this.fetchGroups();
                     }
                 },
 

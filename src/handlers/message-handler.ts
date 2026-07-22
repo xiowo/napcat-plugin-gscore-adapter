@@ -28,6 +28,28 @@ async function forwardToGScore(event: OB11Message): Promise<void> {
     }
 }
 
+function stripForwardPrefix(event: OB11Message, forwardPrefix: string): OB11Message {
+    if (!forwardPrefix) return event;
+
+    const message = Array.isArray(event.message) ? [...event.message] : event.message;
+    const firstTextIndex = Array.isArray(message) ? message.findIndex((seg: any) => seg.type === 'text') : -1;
+
+    if (Array.isArray(message) && firstTextIndex >= 0) {
+        const seg = message[firstTextIndex] as any;
+        const text = String((seg.data as Record<string, unknown> | undefined)?.text || '');
+        (message as any[])[firstTextIndex] = {
+            ...seg,
+            data: { ...(seg.data as Record<string, unknown> | undefined), text: text.slice(forwardPrefix.length) },
+        };
+    }
+
+    return {
+        ...event,
+        raw_message: (event.raw_message || '').slice(forwardPrefix.length),
+        message,
+    } as OB11Message;
+}
+
 // ==================== 消息发送工具 ====================
 
 /**
@@ -275,7 +297,12 @@ export async function handleMessage(ctx: NapCatPluginContext, event: OB11Message
                 if (!groupEnabled && !canBypassGroupDisable(event)) {
                     // 群已禁用且无权限绕过
                 } else {
-                    await forwardToGScore(event);
+                    const forwardPrefix = pluginState.getGroupForwardPrefix(String(groupId));
+                    if (forwardPrefix && !rawMessage.startsWith(forwardPrefix)) {
+                        pluginState.ctx.logger.debug(`群 ${groupId} 消息未匹配转发前缀，已跳过`);
+                    } else {
+                        await forwardToGScore(stripForwardPrefix(event, forwardPrefix));
+                    }
                 }
             } else if (isPrivateMessage) {
                 await forwardToGScore(event);
