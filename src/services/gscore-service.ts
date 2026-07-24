@@ -576,9 +576,9 @@ export class GScoreService {
 
               const fileName = String(segData?.file || 'file').trim() || 'file';
 
-              // 私聊 JSON 文件：按配置限制大小，符合则转裸 base64，不符合则不转发并提示
+              // 私聊 JSON 文件：仅在开关开启时转裸 base64，否则沿用文件 URL 转发
               const isJsonFile = fileName.toLowerCase().endsWith('.json');
-              if (isJsonFile) {
+              if (isJsonFile && pluginState.config.privateJsonBase64Enabled) {
                 try {
                   const maxKbRaw = pluginState.config.privateJsonBase64MaxKb;
                   const maxKb = typeof maxKbRaw === 'number' && Number.isFinite(maxKbRaw) && maxKbRaw > 0 ? maxKbRaw : 1024;

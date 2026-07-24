@@ -49,6 +49,8 @@ export interface PluginConfig {
     disableMultiBot?: boolean;
     /** 扩展兼容：是否开启私聊 file 消息转发（通过 get_private_file_url 获取链接） */
     privateFileForwardEnabled?: boolean;
+    /** 扩展兼容：是否开启私聊 JSON 文件转 base64 发送 */
+    privateJsonBase64Enabled?: boolean;
     /** 扩展兼容：私聊 JSON 文件转 base64 的大小限制（KB） */
     privateJsonBase64MaxKb?: number;
 }
