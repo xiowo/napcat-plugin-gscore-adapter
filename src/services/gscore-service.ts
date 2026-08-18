@@ -24,7 +24,12 @@ interface GsCoreMessageSend {
   echo?: string | null;
 }
 
+type GsCoreContent = Array<{ type: string; data: unknown }>;
+
 type RecallMessageId = string | string[] | number | number[] | null;
+
+const NODE_MARK = '[合并转发]';
+const NODE_MAX_DEPTH = 3;
 
 export class GScoreService {
   private static instance: GScoreService;
@@ -321,6 +326,7 @@ export class GScoreService {
     try {
       // 将 OB11 message 段转换为 GsCore 的 Message[] (content)
       const content = await this.convertOB11ToGsCoreContent(event);
+      const quotedContext: GsCoreContent = [];
 
       let replySeg;
       if (Array.isArray(event.message)) {
@@ -328,35 +334,44 @@ export class GScoreService {
       }
 
       if (replySeg) {
-        const replyId = (replySeg.data as any)?.id;
+        const replyId = this.stringifyId((replySeg.data as any)?.id);
         if (replyId) {
+          quotedContext.push({ type: 'reply_id', data: replyId });
+
           try {
             const ctx = pluginState.ctx;
-            // 调用 get_msg 获取被引用消息详情
             const replyMsg = await ctx.actions.call('get_msg', { message_id: replyId }, ctx.adapterName, ctx.pluginManager.config) as OB11Message;
 
             pluginState.logger.debug(`[GScore] 获取到的引用消息: ${JSON.stringify(replyMsg)}`);
 
-            if (replyMsg && Array.isArray(replyMsg.message)) {
-              for (const seg of replyMsg.message) {
-                if (seg.type === 'image') {
-                  const segData = seg.data as any;
-                  let url = segData?.url || segData?.file;
-                  if (typeof url === 'string') {
-                    url = url.trim();
-                    if (url) {
-                      content.push({ type: 'image', data: url });
-                      pluginState.logger.debug(`[GScore] 已提取引用消息中的图片: ${url}`);
-                    }
-                  }
-                }
+            const replySegments = Array.isArray(replyMsg?.message) ? replyMsg.message : [];
+            let replyText = this.stripForwardCqCode(
+              this.extractPlainText(replySegments, replyMsg?.raw_message)
+            );
+            const quotedImages = this.extractImages(replySegments);
+            const nodeItems = await this.extractForwardNodes(replySegments);
+
+            if (nodeItems.length > 0) {
+              replyText = this.formatNodePreview(nodeItems);
+            }
+
+            quotedContext.push({ type: 'reply', data: replyText });
+            quotedContext.push(...quotedImages.map((image) => ({ type: 'image', data: image })));
+
+            if (nodeItems.length > 0) {
+              quotedContext.push({ type: 'node', data: nodeItems });
+              for (const image of this.extractNodeImages(nodeItems)) {
+                quotedContext.push({ type: 'image', data: image });
               }
             }
           } catch (err) {
             pluginState.logger.warn(`[GScore] 获取引用消息失败: ${err}`);
+            quotedContext.push({ type: 'reply', data: '' });
           }
         }
       }
+
+      content.push(...quotedContext);
 
       // 确定 user_type
       const userType = event.message_type === 'group' ? 'group' : 'direct';
@@ -503,8 +518,8 @@ export class GScoreService {
    * 将 OB11 消息段数组转换为 GsCore 的 Message[] 格式
    * GsCore Message: { type: string, data: any }
    */
-  private async convertOB11ToGsCoreContent(event: OB11Message): Promise<Array<{ type: string; data: unknown }>> {
-    const content: Array<{ type: string; data: unknown }> = [];
+  private async convertOB11ToGsCoreContent(event: OB11Message): Promise<GsCoreContent> {
+    const content: GsCoreContent = [];
     const message = event.message;
 
     if (!message || !Array.isArray(message)) {
@@ -529,8 +544,15 @@ export class GScoreService {
           content.push({ type: 'at', data: String(segData?.qq || '') });
           break;
         case 'reply':
-          content.push({ type: 'reply', data: String(segData?.id || '') });
+          // 引用上下文需要通过 get_msg 解析，在当前消息转换完成后追加。
           break;
+        case 'forward':
+        case 'forward_msg': {
+          const forwardId = this.stringifyId(segData?.id ?? segData?.message_id ?? segData?.resid);
+          const nodeItems = await this.fetchForwardItems(forwardId);
+          content.push({ type: 'node', data: nodeItems });
+          break;
+        }
         case 'face':
           // 表情转为文本占位
           content.push({ type: 'text', data: `[表情:${segData?.id || ''}]` });
@@ -633,6 +655,183 @@ export class GScoreService {
     }
 
     return content;
+  }
+
+  private extractPlainText(segments: unknown[], fallback?: unknown): string {
+    const parts: string[] = [];
+    for (const segment of segments) {
+      if (!segment || typeof segment !== 'object') continue;
+      const seg = segment as Record<string, any>;
+      if (seg.type === 'text') {
+        parts.push(String(seg.data?.text || ''));
+      }
+    }
+    if (parts.length > 0) return parts.join('');
+    return typeof fallback === 'string' ? fallback : '';
+  }
+
+  private stripForwardCqCode(text: string): string {
+    return text
+      .replace(/\[CQ:forward,[^\]]*\]/gi, '')
+      .trim();
+  }
+
+  private extractImages(segments: unknown[]): string[] {
+    const images: string[] = [];
+    for (const segment of segments) {
+      if (!segment || typeof segment !== 'object') continue;
+      const seg = segment as Record<string, any>;
+      if (seg.type !== 'image') continue;
+      const image = String(seg.data?.url || seg.data?.file || '').trim();
+      if (image) images.push(image);
+    }
+    return images;
+  }
+
+  private async extractForwardNodes(segments: unknown[]): Promise<GsCoreContent> {
+    const items: GsCoreContent = [];
+    const seen = new Set<string>();
+    for (const segment of segments) {
+      if (!segment || typeof segment !== 'object') continue;
+      const seg = segment as Record<string, any>;
+      if (seg.type !== 'forward' && seg.type !== 'forward_msg') continue;
+      const forwardId = this.stringifyId(seg.data?.id ?? seg.data?.message_id ?? seg.data?.resid);
+      items.push(...await this.fetchForwardItems(forwardId, 0, seen));
+    }
+    return items;
+  }
+
+  private async fetchForwardItems(forwardId: string, depth: number = 0, seen: Set<string> = new Set()): Promise<GsCoreContent> {
+    if (!forwardId || depth >= NODE_MAX_DEPTH || seen.has(forwardId)) {
+      return [{ type: 'text', data: NODE_MARK }];
+    }
+
+    seen.add(forwardId);
+    try {
+      const ctx = pluginState.ctx;
+      const raw = await ctx.actions.call(
+        'get_forward_msg',
+        { id: forwardId },
+        ctx.adapterName,
+        ctx.pluginManager.config
+      );
+      return await this.parseForwardPayload(raw, depth, seen);
+    } catch (error) {
+      pluginState.logger.warn(`[GScore] 展开合并转发失败 id=${forwardId}:`, error);
+      return [{ type: 'text', data: NODE_MARK }];
+    }
+  }
+
+  private async parseForwardPayload(raw: unknown, depth: number, seen: Set<string>): Promise<GsCoreContent> {
+    const envelope = raw && typeof raw === 'object' ? raw as Record<string, any> : null;
+    const messages = Array.isArray(raw)
+      ? raw
+      : Array.isArray(envelope?.messages)
+        ? envelope.messages
+        : Array.isArray(envelope?.data?.messages)
+          ? envelope.data.messages
+          : null;
+
+    if (!messages) return [{ type: 'text', data: NODE_MARK }];
+
+    const items: GsCoreContent = [];
+    for (const entry of messages) {
+      if (!entry || typeof entry !== 'object') continue;
+      const record = entry as Record<string, any>;
+      const payload = record.type === 'node' && record.data && typeof record.data === 'object'
+        ? record.data as Record<string, any>
+        : record;
+      const nickname = String(payload.sender?.nickname || payload.name || payload.nickname || '').trim();
+      if (nickname) items.push({ type: 'text', data: `${nickname}:` });
+
+      const nodeContent = payload.content ?? payload.message;
+      if (typeof nodeContent === 'string' && nodeContent) {
+        items.push({ type: 'text', data: nodeContent });
+      } else if (Array.isArray(nodeContent)) {
+        items.push(...await this.convertForwardSegments(nodeContent, depth, seen));
+      }
+    }
+
+    return items.length > 0 ? items : [{ type: 'text', data: NODE_MARK }];
+  }
+
+  private async convertForwardSegments(segments: unknown[], depth: number, seen: Set<string>): Promise<GsCoreContent> {
+    const items: GsCoreContent = [];
+    for (const segment of segments) {
+      if (!segment || typeof segment !== 'object') continue;
+      const seg = segment as Record<string, any>;
+      const data = seg.data && typeof seg.data === 'object' ? seg.data as Record<string, any> : {};
+
+      switch (seg.type) {
+        case 'text':
+          items.push({ type: 'text', data: String(data.text || '') });
+          break;
+        case 'image': {
+          const image = String(data.url || data.file || '').trim();
+          if (image) items.push({ type: 'image', data: image });
+          break;
+        }
+        case 'at':
+          items.push({ type: 'at', data: String(data.qq || '') });
+          break;
+        case 'record':
+        case 'video': {
+          const media = String(data.url || data.file || '').trim();
+          if (media) items.push({ type: seg.type, data: media });
+          break;
+        }
+        case 'file': {
+          const fileName = String(data.name || data.file || 'file');
+          const fileContent = String(data.url || '').trim();
+          if (fileContent) items.push({ type: 'file', data: `${fileName}|${fileContent}` });
+          break;
+        }
+        case 'forward':
+        case 'forward_msg': {
+          items.push({ type: 'text', data: NODE_MARK });
+          const nestedId = this.stringifyId(data.id ?? data.message_id ?? data.resid);
+          items.push(...await this.fetchForwardItems(nestedId, depth + 1, seen));
+          break;
+        }
+      }
+    }
+    return items;
+  }
+
+  private formatNodePreview(items: GsCoreContent): string {
+    const lines = [NODE_MARK];
+    let pendingSpeaker = '';
+
+    for (const item of items) {
+      let content = '';
+      if (item.type === 'text') {
+        const text = String(item.data || '').trim();
+        if (!text || text === NODE_MARK) continue;
+
+        if (/[:：]$/.test(text)) {
+          pendingSpeaker = text.slice(0, -1).trim();
+          continue;
+        }
+        content = text;
+      } else if (item.type === 'image') content = '[图片]';
+      else if (item.type === 'record') content = '[语音]';
+      else if (item.type === 'video') content = '[视频]';
+      else if (item.type === 'file') content = '[文件]';
+
+      if (content) {
+        lines.push(pendingSpeaker ? `${pendingSpeaker}：${content}` : content);
+        pendingSpeaker = '';
+      }
+    }
+
+    return lines.join('\n');
+  }
+
+  private extractNodeImages(items: GsCoreContent): string[] {
+    return items
+      .filter((item) => item.type === 'image')
+      .map((item) => String(item.data || '').trim())
+      .filter(Boolean);
   }
 
   // ==================== GsCore 消息接收处理 ====================
@@ -892,6 +1091,7 @@ export class GScoreService {
           break;
 
         case 'reply':
+        case 'reply_id':
           result.push({ type: 'reply', data: { id: String(msg.data) } });
           break;
 
