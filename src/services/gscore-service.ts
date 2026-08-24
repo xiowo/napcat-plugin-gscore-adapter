@@ -353,16 +353,20 @@ export class GScoreService {
 
             if (nodeItems.length > 0) {
               replyText = this.formatNodePreview(nodeItems);
+            } else if (quotedImages.length > 0) {
+              replyText = [this.stripImageCqCode(replyText), ...quotedImages]
+                .filter(Boolean)
+                .join('\n');
             }
 
             quotedContext.push({ type: 'reply', data: replyText });
-            quotedContext.push(...quotedImages.map((image) => ({ type: 'image', data: image })));
+
+            if (nodeItems.length === 0) {
+              quotedContext.push(...quotedImages.map((image) => ({ type: 'image', data: image })));
+            }
 
             if (nodeItems.length > 0) {
               quotedContext.push({ type: 'node', data: nodeItems });
-              for (const image of this.extractNodeImages(nodeItems)) {
-                quotedContext.push({ type: 'image', data: image });
-              }
             }
           } catch (err) {
             pluginState.logger.warn(`[GScore] 获取引用消息失败: ${err}`);
@@ -532,7 +536,8 @@ export class GScoreService {
 
     for (const seg of message) {
       const segData = seg.data as Record<string, unknown> | undefined;
-      switch (seg.type) {
+      const segmentType = String(seg.type);
+      switch (segmentType) {
         case 'text':
           content.push({ type: 'text', data: segData?.text || '' });
           break;
@@ -673,6 +678,12 @@ export class GScoreService {
   private stripForwardCqCode(text: string): string {
     return text
       .replace(/\[CQ:forward,[^\]]*\]/gi, '')
+      .trim();
+  }
+
+  private stripImageCqCode(text: string): string {
+    return text
+      .replace(/\[CQ:image,[^\]]*\]/gi, '')
       .trim();
   }
 
@@ -825,13 +836,6 @@ export class GScoreService {
     }
 
     return lines.join('\n');
-  }
-
-  private extractNodeImages(items: GsCoreContent): string[] {
-    return items
-      .filter((item) => item.type === 'image')
-      .map((item) => String(item.data || '').trim())
-      .filter(Boolean);
   }
 
   // ==================== GsCore 消息接收处理 ====================
