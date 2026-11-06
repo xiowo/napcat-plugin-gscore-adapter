@@ -2,6 +2,7 @@
 import WebSocket from 'ws';
 import type { OB11Message, OB11PostSendMsg } from 'napcat-types/napcat-onebot';
 import { pluginState } from '../core/state';
+import { GroupProfileCache } from './group-profile-cache';
 
 /**
  * GsCore Message 结构（早柚核心消息单元）
@@ -41,6 +42,7 @@ export class GScoreService {
   private isManualRetry: boolean = false;
   private isTimeoutTerminated: boolean = false;
   private readonly CONNECTION_TIMEOUT = 10000;
+  private readonly groupProfiles = new GroupProfileCache();
 
   private constructor() { }
 
@@ -242,6 +244,7 @@ export class GScoreService {
   }
 
   public disconnect(resetCounter: boolean = true) {
+    this.groupProfiles.clear();
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
@@ -311,6 +314,40 @@ export class GScoreService {
     const payload = JSON.stringify(messageReceive);
     // GsCore 使用 receive_bytes()，需要发送二进制帧
     this.ws?.send(Buffer.from(payload));
+  }
+
+  private async buildSender(event: OB11Message): Promise<Record<string, unknown>> {
+    const sender = event.sender as Record<string, unknown> | undefined;
+    const userId = String(sender?.user_id || event.user_id);
+    const isGroup = event.message_type === 'group';
+    const result: Record<string, unknown> = {
+      ...sender,
+      user_id: userId,
+      nickname: isGroup
+        ? sender?.card || sender?.nickname || ''
+        : sender?.nickname || sender?.card || '',
+      avatar: `https://q1.qlogo.cn/g?b=qq&nk=${userId}&s=640`,
+    };
+
+    if (isGroup && event.group_id) {
+      const groupId = String(event.group_id);
+      const ctx = pluginState.ctx;
+      const profile = await this.groupProfiles.get(groupId, async () => {
+        try {
+          const info = await ctx.actions.call(
+            'get_group_info', { group_id: groupId }, ctx.adapterName, ctx.pluginManager.config
+          ) as { group_name?: string } | undefined;
+          return info?.group_name || '';
+        } catch (error) {
+          ctx.logger.debug(`[GScore] 获取群 ${groupId} 资料失败: ${error}`);
+          throw error;
+        }
+      });
+      if (profile.group_name) result.group_name = profile.group_name;
+      result.group_icon = profile.group_icon;
+    }
+
+    return result;
   }
 
   /**
@@ -397,16 +434,7 @@ export class GScoreService {
         user_type: userType,
         group_id: event.group_id ? String(event.group_id) : null,
         user_id: String(event.user_id),
-        sender: sender ? {
-          ...sender,
-          user_id: sender.user_id ? String(sender.user_id) : String(event.user_id),
-          nickname: sender.nickname || sender.card || '',
-          avatar: `https://q1.qlogo.cn/g?b=qq&nk=${sender.user_id || event.user_id}&s=640`
-        } : {
-          user_id: String(event.user_id),
-          nickname: '',
-          avatar: `https://q1.qlogo.cn/g?b=qq&nk=${event.user_id}&s=640`
-        },
+        sender: await this.buildSender(event),
         user_pm: userPm,
         content: content,
       };
